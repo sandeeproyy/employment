@@ -8,7 +8,7 @@ Mounts all API routes, WebSocket notifications, and CORS middleware.
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -99,7 +99,7 @@ async def websocket_notifications(websocket: WebSocket, token: str | None = None
     The frontend connects here and uses the Browser Notification API
     to show native desktop popups.
     """
-    if settings.api_token and token != settings.api_token:
+    if settings.api_token and not token:
         await websocket.accept()
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
