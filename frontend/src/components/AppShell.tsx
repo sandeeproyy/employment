@@ -65,33 +65,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotif, setShowNotif] = useState(false);
-  const [isAuthorized, setIsAuthorized] = useState(true);
-  const [passcode, setPasscode] = useState("");
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   useEffect(() => {
-    // Check if we need auth by attempting a test dashboard fetch
-    const checkAuth = async () => {
-      try {
-        const { api } = await import("@/lib/api");
-        await api.getDashboard();
-        setIsAuthorized(true);
-      } catch (e: any) {
-        if (e.message === "unauthorized") {
-          setIsAuthorized(false);
-        }
-      }
-    };
-
-    checkAuth();
-
-    // Listen for unauthorized events dispatched by apiFetch
-    const handleUnauthorized = () => {
-      setIsAuthorized(false);
-    };
-
-    window.addEventListener("unauthorized", handleUnauthorized);
-
     const disconnect = connectNotifications((data) => {
       const notif: Notification = {
         id: Date.now(),
@@ -106,105 +82,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     });
 
     return () => {
-      window.removeEventListener("unauthorized", handleUnauthorized);
       disconnect();
     };
   }, []);
-
-  if (!isAuthorized) {
-    const handleAuthenticate = (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!passcode.trim()) return;
-      localStorage.setItem("api_token", passcode.trim());
-      window.location.reload();
-    };
-
-    return (
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          background: "linear-gradient(135deg, #050505 0%, #101015 100%)",
-          height: "100vh",
-          fontFamily: "var(--font-mono)",
-        }}
-      >
-        <form
-          onSubmit={handleAuthenticate}
-          className="card"
-          style={{
-            maxWidth: 420,
-            width: "90%",
-            border: "1px solid var(--accent-primary)",
-            padding: "var(--space-xl)",
-            display: "flex",
-            flexDirection: "column",
-            gap: "var(--space-md)",
-            background: "rgba(10, 10, 15, 0.9)",
-            backdropFilter: "blur(8px)",
-            boxShadow: "0 0 30px rgba(37, 99, 235, 0.2)",
-            borderRadius: "var(--radius-lg)",
-          }}
-        >
-          <div style={{ textAlign: "center" }}>
-            <div style={{ display: "inline-block", background: "rgba(37, 99, 235, 0.1)", padding: "10px", borderRadius: "50%", marginBottom: 12 }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
-            </div>
-            <h2 style={{ color: "var(--accent-primary)", fontSize: "1.3rem", fontWeight: 700, letterSpacing: "2px", marginBottom: 8 }}>
-              SYS_SECURE_WALL_v1.2
-            </h2>
-            <p style={{ color: "var(--text-secondary)", fontSize: "0.8rem", lineHeight: 1.6, marginBottom: 16 }}>
-              Dashboard access restricted. Please enter the passcode to authenticate.
-            </p>
-          </div>
-          
-          <input
-            type="password"
-            className="input"
-            placeholder="ENTER ACCESS PASSCODE..."
-            value={passcode}
-            onChange={(e) => setPasscode(e.target.value)}
-            style={{
-              textAlign: "center",
-              letterSpacing: "3px",
-              fontFamily: "var(--font-mono)",
-              fontSize: "0.95rem",
-              background: "var(--bg-secondary)",
-              border: "1px solid var(--border-subtle)",
-              color: "var(--accent-primary)",
-              padding: "12px",
-              borderRadius: "var(--radius-md)",
-            }}
-            autoFocus
-          />
-
-          <button type="submit" className="btn btn-primary" style={{ width: "100%", fontFamily: "var(--font-mono)", fontWeight: 700, padding: "12px" }}>
-            [DECRYPT & AUTHENTICATE]
-          </button>
-
-          {process.env.NODE_ENV !== "production" && (
-            <div style={{ 
-              marginTop: 16, 
-              padding: 12, 
-              background: "rgba(255, 255, 255, 0.03)", 
-              borderRadius: "var(--radius-sm)", 
-              borderLeft: "2px solid var(--accent-secondary)",
-              fontSize: "0.75rem",
-              color: "var(--text-tertiary)",
-              lineHeight: 1.5
-            }}>
-              <strong style={{ color: "var(--text-secondary)" }}>HOW TO LOG IN (DEV MODE):</strong><br />
-              Enter the value of <code>API_TOKEN</code> located inside your backend <code>.env</code> file (by default, it is set to <code>supersecret</code>).
-            </div>
-          )}
-        </form>
-      </div>
-    );
-  }
 
   return (
     <div className="app-layout">

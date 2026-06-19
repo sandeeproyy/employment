@@ -22,12 +22,22 @@ const getApiBase = () => {
 
 export const API_BASE = getApiBase();
 
+export const getApiToken = (): string => {
+  if (typeof window === 'undefined') return '';
+  let token = sessionStorage.getItem('api_token') || '';
+  if (!token) {
+    token = 'session_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    sessionStorage.setItem('api_token', token);
+  }
+  return token;
+};
+
 async function apiFetch<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
   const url = `${API_BASE}${path}`;
-  const token = process.env.NEXT_PUBLIC_API_TOKEN || (typeof window !== 'undefined' ? localStorage.getItem('api_token') : '') || '';
+  const token = process.env.NEXT_PUBLIC_API_TOKEN || getApiToken();
   
   const headers = {
     'Content-Type': 'application/json',
@@ -45,7 +55,7 @@ async function apiFetch<T>(
 
   if (res.status === 401) {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('api_token');
+      sessionStorage.removeItem('api_token');
       window.dispatchEvent(new Event('unauthorized'));
     }
     throw new Error('unauthorized');
@@ -249,7 +259,7 @@ export const api = {
   uploadResume: async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
-    const token = typeof window !== 'undefined' ? localStorage.getItem('api_token') : '';
+    const token = getApiToken();
     const headers: Record<string, string> = {};
     if (token) headers['X-API-Token'] = token;
     const res = await fetch(`${API_BASE}/api/profile/resume`, {
@@ -331,7 +341,7 @@ export function connectNotifications(
     timestamp: string;
   }) => void
 ) {
-  const token = process.env.NEXT_PUBLIC_API_TOKEN || (typeof window !== 'undefined' ? localStorage.getItem('api_token') : '') || '';
+  const token = process.env.NEXT_PUBLIC_API_TOKEN || getApiToken();
   const wsUrl = API_BASE.replace('http', 'ws') + `/ws/notifications${token ? `?token=${encodeURIComponent(token)}` : ''}`;
   let ws: WebSocket;
   let reconnectTimer: NodeJS.Timeout;

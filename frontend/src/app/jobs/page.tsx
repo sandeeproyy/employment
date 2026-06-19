@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import AppShell from "@/components/AppShell";
 import ScoreRing from "@/components/ScoreRing";
-import { api, Job, JobListResponse } from "@/lib/api";
+import { api, Job, JobListResponse, getApiToken } from "@/lib/api";
 
 export default function JobsPage() {
   const [data, setData] = useState<JobListResponse | null>(null);
@@ -17,7 +17,7 @@ export default function JobsPage() {
     setExporting(true);
     try {
       const { API_BASE } = await import("@/lib/api");
-      const token = localStorage.getItem("api_token") || "";
+      const token = getApiToken();
       const headers: Record<string, string> = {};
       if (token) headers["X-API-Token"] = token;
 

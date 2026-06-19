@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import AppShell from "@/components/AppShell";
-import { api, Profile } from "@/lib/api";
+import { api, Profile, getApiToken } from "@/lib/api";
 
 export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -172,17 +172,17 @@ export default function ProfilePage() {
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12, fontFamily: "var(--font-mono)", fontSize: "0.85rem" }}>
               <div>
-                <span style={{ color: "var(--text-tertiary)" }}>ACTIVE PASSCODE:</span>{" "}
-                <span style={{ color: "var(--accent-primary)", textShadow: "0 0 8px var(--accent-primary-glow)", fontWeight: "bold" }}>
-                  {typeof window !== "undefined" ? localStorage.getItem("api_token") || "default" : "default"}
+                <span style={{ color: "var(--text-tertiary)" }}>ACTIVE SESSION:</span>{" "}
+                <span style={{ color: "var(--accent-secondary)", textShadow: "0 0 8px var(--accent-secondary-glow)", fontWeight: "bold" }}>
+                  {typeof window !== "undefined" ? getApiToken() : "default"}
                 </span>
               </div>
               <p style={{ color: "var(--text-secondary)", fontSize: "0.75rem", lineHeight: 1.4, margin: "4px 0" }}>
-                Workspace data is completely isolated by this passcode. Use another passcode to create/access a separate dashboard.
+                Your data is temporarily isolated in this session. Closing the browser or tab will delete your session data.
               </p>
               <button
                 onClick={() => {
-                  localStorage.removeItem("api_token");
+                  sessionStorage.removeItem("api_token");
                   window.location.reload();
                 }}
                 className="btn btn-primary"
@@ -196,7 +196,7 @@ export default function ProfilePage() {
                   cursor: "pointer",
                 }}
               >
-                [SWITCH PROFILE / LOG OUT]
+                [CLEAR SESSION & START FRESH]
               </button>
             </div>
           </div>
