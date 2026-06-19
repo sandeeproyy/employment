@@ -4,7 +4,23 @@
  * Typed fetch wrapper for all backend API endpoints.
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const getApiBase = () => {
+  // Respect user-specified non-localhost API URL if baked in during build
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (envUrl && !envUrl.includes('localhost')) {
+    return envUrl;
+  }
+  
+  if (typeof window !== 'undefined') {
+    const { protocol, hostname } = window.location;
+    // Fallback: use current domain/IP with backend port 8000
+    return `${protocol}//${hostname}:8000`;
+  }
+  
+  return envUrl || 'http://localhost:8000';
+};
+
+export const API_BASE = getApiBase();
 
 async function apiFetch<T>(
   path: string,
@@ -203,6 +219,8 @@ export interface DashboardStats {
   high_match_jobs: number;
   jobs_by_status: Record<string, number>;
   applications_by_status: Record<string, number>;
+  is_scanning: boolean;
+  is_scoring: boolean;
   recent_jobs: Array<{
     id: number;
     title: string;
@@ -295,7 +313,7 @@ export const api = {
   getApplicationLatex: (id: number) => apiFetch<{ latex: string }>(`/api/applications/${id}/latex`),
   resetAllData: () => apiFetch<{ message: string }>('/api/jobs/reset-all', { method: 'POST' }),
   chatbotChat: (messages: Array<{ role: string; content: string }>) =>
-    apiFetch<{ response: string; preference_update?: any }>('/api/chatbot/chat', {
+    apiFetch<{ response: string; preference_update?: any; suggested_replies?: string[] }>('/api/chatbot/chat', {
       method: 'POST',
       body: JSON.stringify({ messages }),
     }),

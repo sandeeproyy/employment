@@ -11,6 +11,39 @@ export default function JobsPage() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [loadingSelected, setLoadingSelected] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportPDF = async () => {
+    setExporting(true);
+    try {
+      const { API_BASE } = await import("@/lib/api");
+      const token = localStorage.getItem("api_token") || "";
+      const headers: Record<string, string> = {};
+      if (token) headers["X-API-Token"] = token;
+
+      const response = await fetch(`${API_BASE}/api/jobs/export-pdf`, {
+        headers,
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate PDF");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "matching_jobs.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e: any) {
+      alert("Error exporting PDF: " + e.message);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const [filters, setFilters] = useState({
     page: 1,
@@ -109,22 +142,43 @@ export default function JobsPage() {
               {data?.total ? ` • page ${data.page} of ${totalPages}` : ""}
             </p>
           </div>
-          <button className="btn btn-primary" onClick={runScan} disabled={scanning}>
-            {scanning ? (
-              <>
-                <div className="loading-spinner" style={{ width: 12, height: 12, borderWidth: "1.5px", marginRight: 6 }} />
-                Scanning...
-              </>
-            ) : (
-              <>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6 }}>
-                  <circle cx="11" cy="11" r="8" />
-                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                </svg>
-                run-scan
-              </>
-            )}
-          </button>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button className="btn btn-success" onClick={handleExportPDF} disabled={exporting}>
+              {exporting ? (
+                <>
+                  <div className="loading-spinner" style={{ width: 12, height: 12, borderWidth: "1.5px", marginRight: 6 }} />
+                  Exporting...
+                </>
+              ) : (
+                <>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6 }}>
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                    <polyline points="10 9 9 9 8 9" />
+                  </svg>
+                  export-pdf
+                </>
+              )}
+            </button>
+            <button className="btn btn-primary" onClick={runScan} disabled={scanning}>
+              {scanning ? (
+                <>
+                  <div className="loading-spinner" style={{ width: 12, height: 12, borderWidth: "1.5px", marginRight: 6 }} />
+                  Scanning...
+                </>
+              ) : (
+                <>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6 }}>
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                  run-scan
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 

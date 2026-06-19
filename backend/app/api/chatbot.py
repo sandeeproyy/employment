@@ -10,6 +10,7 @@ import logging
 import re
 import google.generativeai as genai
 from fastapi import APIRouter, Depends, HTTPException
+from app.core.auth import verify_api_token
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,6 +40,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     preference_update: dict | None = None
+    suggested_replies: list[str] | None = None
 
 
 SYSTEM_PROMPT = """You are a highly professional AI Career Advisor and Executive Search Assistant. The candidate has uploaded a resume, and your mandate is to conversationally construct and refine their precise job/internship targeting preferences.
@@ -58,7 +60,11 @@ Current Preferences in Database:
 
 Your Instructions:
 1. Maintain a highly professional, polite, and executive-level tone. Avoid overly casual language.
-2. Ask clear, targeted questions to refine their desired job roles, target locations, domains, and preferred job types (internship vs full-time).
+2. Conduct a structured, step-by-step onboarding flow. Ask exactly ONE targeted question at a time to complete their preferences in order:
+   - Step 1: Job Types. If not set, ask if they want full-time, internship, etc. and provide suggested replies like ["Internship", "Full-time", "Both"].
+   - Step 2: Domains. Suggest 3-4 domains based on their resume skills (e.g., ["Software Development", "Machine Learning", "Robotics"]) and ask which they prefer.
+   - Step 3: Experience Level. Ask for their level and suggest: ["Student", "Entry Level", "Mid Level", "Senior"].
+   - Step 4: Locations. Ask for their preferred locations and suggest options like ["Remote", "India", "United States", "Singapore"].
 3. Focus strictly on aligning searches to their actual skill set (as parsed from the resume) and target parameters.
 4. When the user specifies any location or role preferences, you must parse and map them to the database schema.
 5. Do not suggest or configure irrelevant job boards or default companies (e.g. Cloudflare/Figma) unless the user explicitly requests them. Only build job discovery sources that match their target keywords and locations.
@@ -73,7 +79,8 @@ Minimum Match Score should be an integer between 0 and 100.
 You MUST return a JSON object with this exact schema:
 {{
   "response": "Your professional, executive response to the user.",
-  "preference_update": {{ ... }} // optional, include only if you detected preference changes in the user's latest input
+  "preference_update": {{ ... }}, // optional, include only if you detected preference changes in the user's latest input
+  "suggested_replies": ["Option 1", "Option 2", ...] // optional, list of 2-4 simple, short button labels to guide the user's choice for the current question. Keep them very short (1-3 words).
 }}
 Do not include markdown code fences (like ```json), return raw JSON only.
 """
@@ -235,17 +242,21 @@ def _build_fallback_response(update: dict | None, user_msg: str) -> str:
     return "\n".join(parts)
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat_endpoint(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
+async def chat_endpoint(
+    payload: ChatRequest,
+    db: AsyncSession = Depends(get_db),
+    user_token: str = Depends(verify_api_token),
+):
     """Handle chat interaction and update preferences based on LLM output."""
 
-    # 1. Fetch Profile & Preferences
-    profile_result = await db.execute(select(UserProfile).limit(1))
+    # 1. Fetch Profile & Preferences scoped to user
+    profile_result = await db.execute(select(UserProfile).where(UserProfile.user_token == user_token))
     profile = profile_result.scalar_one_or_none()
 
-    pref_result = await db.execute(select(UserPreference).limit(1))
+    pref_result = await db.execute(select(UserPreference).where(UserPreference.user_token == user_token))
     pref = pref_result.scalar_one_or_none()
     if not pref:
-        pref = UserPreference()
+        pref = UserPreference(user_token=user_token)
         db.add(pref)
         await db.commit()
         await db.refresh(pref)
@@ -319,6 +330,7 @@ async def chat_endpoint(payload: ChatRequest, db: AsyncSession = Depends(get_db)
                 parsed = json.loads(response.text)
                 chatbot_msg = parsed.get("response", "How can I help you with your job search today?")
                 upd = parsed.get("preference_update")
+                suggested = parsed.get("suggested_replies") or []
                 gemini_failed = False
                 break
 
@@ -329,9 +341,21 @@ async def chat_endpoint(payload: ChatRequest, db: AsyncSession = Depends(get_db)
         gemini_failed = True
 
     # --- Fallback: keyword-based preference extraction ---
+    suggested = []
     if gemini_failed:
         upd = _parse_preferences_from_text(latest_user_msg)
         chatbot_msg = _build_fallback_response(upd, latest_user_msg)
+        # Generate fallback quick response suggestion chips
+        if not upd:
+            suggested = ["Internship", "Full-time", "Remote", "India"]
+        else:
+            if "job_types" not in upd:
+                suggested.extend(["Internship", "Full-time"])
+            if "locations" not in upd:
+                suggested.extend(["Remote", "India", "United States"])
+            if "domains" not in upd:
+                suggested.extend(["Machine Learning", "Software Development", "Robotics"])
+            suggested = list(dict.fromkeys(suggested))[:4] # deduplicate and limit
 
     # 4. Save Preference Updates to DB
     if upd:
@@ -377,6 +401,9 @@ async def chat_endpoint(payload: ChatRequest, db: AsyncSession = Depends(get_db)
 
         await db.commit()
         logger.info("Chatbot updated preferences dynamically in DB.")
+        # Auto-trigger job discovery/scoring pipeline if resume is uploaded and preferences are fully set
+        from app.services.pipeline_trigger import auto_trigger_pipeline_if_ready
+        await auto_trigger_pipeline_if_ready(db, user_token)
 
     # 5. Query matching jobs and append recommendations
     wants_jobs = any(kw in latest_user_msg.lower() for kw in ["job", "match", "recommend", "show", "find", "best", "what are", "list"])
@@ -384,7 +411,7 @@ async def chat_endpoint(payload: ChatRequest, db: AsyncSession = Depends(get_db)
     from app.models.job import Job
     jobs_result = await db.execute(
         select(Job)
-        .where(Job.match_score >= threshold)
+        .where((Job.match_score >= threshold) & (Job.user_token == user_token))
         .order_by(Job.match_score.desc())
         .limit(3)
     )
@@ -400,4 +427,4 @@ async def chat_endpoint(payload: ChatRequest, db: AsyncSession = Depends(get_db)
     elif wants_jobs:
         chatbot_msg += "\n\nNo matching jobs currently found in the database. You can run a discovery scan to search for new listings."
 
-    return ChatResponse(response=chatbot_msg, preference_update=upd)
+    return ChatResponse(response=chatbot_msg, preference_update=upd, suggested_replies=suggested)

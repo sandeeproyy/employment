@@ -16,6 +16,7 @@ class Application(Base):
     __tablename__ = "applications"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_token: Mapped[str] = mapped_column(String(255), default="default", index=True)
 
     # ── Linked Job ───────────────────────────────────────────
     job_id: Mapped[int] = mapped_column(

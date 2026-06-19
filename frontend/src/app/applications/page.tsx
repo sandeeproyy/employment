@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
-import { api, KanbanBoard, Application, Job } from "@/lib/api";
+import { api, KanbanBoard, Application, Job, API_BASE } from "@/lib/api";
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "var(--accent-warning)",
@@ -360,7 +360,7 @@ export default function ApplicationsPage() {
               </div>
               <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
                 <a
-                  href={`http://localhost:8000/api/applications/${selectedApp.id}/resume`}
+                  href={`${API_BASE}/api/applications/${selectedApp.id}/resume`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn btn-sm btn-primary"

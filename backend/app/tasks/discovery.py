@@ -39,114 +39,156 @@ def get_async_session():
     return async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
-async def _discover_all_sources():
-    """Core async logic for job discovery."""
+async def _discover_all_sources(user_token: str):
+    """Core async logic for job discovery with parallel scanning."""
+    import redis
+    from app.core.config import settings
+    
+    # Track scanner active state in Redis per user
+    try:
+        r = redis.Redis.from_url(settings.redis_url)
+        r.set(f"scanner_active:{user_token}", "true", ex=1800)  # expires in 30 minutes in case of crash
+    except Exception as e:
+        logger.error(f"Failed to set scanner_active in Redis: {e}")
+        r = None
+
     session_factory = get_async_session()
+    total_new = 0
 
-    async with session_factory() as session:
-        # Get user preferences (single user)
-        result = await session.execute(select(UserPreference).limit(1))
-        preferences = result.scalar_one_or_none()
+    try:
+        async with session_factory() as session:
+            # Get user preferences for this specific user
+            result = await session.execute(
+                select(UserPreference).where(UserPreference.user_token == user_token)
+            )
+            preferences = result.scalar_one_or_none()
 
-        if not preferences:
-            logger.warning("No user preferences found. Skipping discovery.")
-            return 0
+            if not preferences:
+                logger.warning(f"No preferences found for user {user_token}. Skipping discovery.")
+                return 0
 
-        sources_config = preferences.job_sources or []
-        if not sources_config:
-            logger.info("No job sources configured. Skipping discovery.")
-            return 0
+            sources_config = preferences.job_sources or []
+            if not sources_config:
+                logger.info(f"No job sources configured for user {user_token}. Skipping discovery.")
+                return 0
 
-        total_new = 0
+            # Collect active sources
+            active_sources = []
+            for source_config in sources_config:
+                if not source_config.get("enabled", True):
+                    continue
+                source_type = source_config.get("type", "")
+                source_class = SOURCE_CLASSES.get(source_type)
+                if not source_class:
+                    logger.warning(f"Unknown source type: {source_type}")
+                    continue
+                active_sources.append((source_config, source_class()))
 
-        for source_config in sources_config:
-            if not source_config.get("enabled", True):
-                continue
+            if not active_sources:
+                logger.info(f"No enabled job sources found for user {user_token}. Skipping discovery.")
+                return 0
 
-            source_type = source_config.get("type", "")
-            source_class = SOURCE_CLASSES.get(source_type)
+            # 1. Discover jobs concurrently across all enabled sources
+            logger.info(f"⚡ Discovering jobs for user {user_token} from {len(active_sources)} sources concurrently...")
+            
+            async def discover_source_safe(config, source_inst):
+                try:
+                    jobs = await source_inst.discover(config)
+                    return config, jobs, None
+                except Exception as ex:
+                    logger.error(f"Source [{config.get('type')}] discovery error: {ex}")
+                    return config, [], ex
 
-            if not source_class:
-                logger.warning(f"Unknown source type: {source_type}")
-                continue
+            # Run concurrently using asyncio.gather
+            gather_tasks = [discover_source_safe(cfg, inst) for cfg, inst in active_sources]
+            discover_results = await asyncio.gather(*gather_tasks)
 
-            try:
-                source = source_class()
-                raw_jobs = await source.discover(source_config)
+            # 2. Process results sequentially (to be DB session-safe)
+            for config, raw_jobs, error in discover_results:
+                if error:
+                    continue
+                
+                source_type = config.get("type", "")
+                source_new_count = 0
 
-                for raw_job in raw_jobs:
-                    # Generate canonical ID for dedup
-                    canonical_id = generate_canonical_id(
-                        raw_job.company, raw_job.title, raw_job.location
-                    )
-
-                    # Check if already exists
-                    existing = await session.execute(
-                        select(Job).where(Job.canonical_id == canonical_id)
-                    )
-                    existing_job = existing.scalar_one_or_none()
-
-                    if existing_job:
-                        # Merge source URL
-                        existing_job.all_source_urls = merge_source_urls(
-                            existing_job.all_source_urls or [],
-                            raw_job.source_url,
+                try:
+                    for raw_job in raw_jobs:
+                        canonical_id = generate_canonical_id(
+                            raw_job.company, raw_job.title, raw_job.location
                         )
-                        continue
 
-                    # Create new job
-                    new_job = Job(
-                        canonical_id=canonical_id,
-                        title=raw_job.title,
-                        company=raw_job.company,
-                        description=raw_job.description,
-                        location=raw_job.location,
-                        remote_allowed=raw_job.remote_allowed,
-                        posted_at=raw_job.posted_at,
-                        job_type=raw_job.job_type,
-                        experience_level=raw_job.experience_level,
-                        department=raw_job.department,
-                        source=raw_job.source,
-                        source_url=raw_job.source_url,
-                        apply_url=raw_job.apply_url,
-                        all_source_urls=[raw_job.source_url],
-                        skills_required=raw_job.skills_required,
-                        salary_info=raw_job.salary_info or None,
-                        status="new",
-                        discovered_at=raw_job.discovered_at,
-                        expires_at=raw_job.expires_at,
-                    )
-                    session.add(new_job)
-                    total_new += 1
+                        # Check if already exists for this specific user
+                        existing = await session.execute(
+                            select(Job).where((Job.canonical_id == canonical_id) & (Job.user_token == user_token))
+                        )
+                        existing_job = existing.scalar_one_or_none()
 
-                await session.commit()
+                        if existing_job:
+                            # Merge source URL
+                            existing_job.all_source_urls = merge_source_urls(
+                                existing_job.all_source_urls or [],
+                                raw_job.source_url,
+                            )
+                            continue
 
-                logger.info(
-                    f"Source [{source_type}]: Processed {len(raw_jobs)} jobs, "
-                    f"{total_new} new"
-                )
+                        # Create new job scoped to this user
+                        new_job = Job(
+                            canonical_id=canonical_id,
+                            user_token=user_token,
+                            title=raw_job.title,
+                            company=raw_job.company,
+                            description=raw_job.description,
+                            location=raw_job.location,
+                            remote_allowed=raw_job.remote_allowed,
+                            posted_at=raw_job.posted_at,
+                            job_type=raw_job.job_type,
+                            experience_level=raw_job.experience_level,
+                            department=raw_job.department,
+                            source=raw_job.source,
+                            source_url=raw_job.source_url,
+                            apply_url=raw_job.apply_url,
+                            all_source_urls=[raw_job.source_url],
+                            skills_required=raw_job.skills_required,
+                            salary_info=raw_job.salary_info or None,
+                            status="new",
+                            discovered_at=raw_job.discovered_at,
+                            expires_at=raw_job.expires_at,
+                        )
+                        session.add(new_job)
+                        total_new += 1
+                        source_new_count += 1
 
+                    await session.commit()
+                    logger.info(f"Source [{source_type}] for {user_token}: Saved {source_new_count} new jobs out of {len(raw_jobs)} discovered.")
+
+                    # Parallely trigger scoring and listing for this source immediately
+                    if source_new_count > 0:
+                        from app.tasks.matching import score_new_jobs
+                        score_new_jobs.delay(user_token)
+
+                except Exception as e:
+                    logger.error(f"Failed to process and commit jobs for source [{source_type}] and user {user_token}: {e}")
+                    await session.rollback()
+
+    finally:
+        # Clear scanner active state in Redis per user
+        if r:
+            try:
+                r.delete(f"scanner_active:{user_token}")
             except Exception as e:
-                logger.error(f"Source [{source_type}] failed: {e}")
-                await session.rollback()
-                continue
-
-    # Trigger matching for new jobs
-    if total_new > 0:
-        from app.tasks.matching import score_new_jobs
-        score_new_jobs.delay()
+                logger.error(f"Failed to delete scanner_active from Redis for user {user_token}: {e}")
 
     return total_new
 
 
 @celery_app.task(name="app.tasks.discovery.discover_all_sources", queue="discovery")
-def discover_all_sources():
-    """Celery task: Run job discovery across all configured sources."""
-    logger.info("Starting job discovery run...")
+def discover_all_sources(user_token: str = "default"):
+    """Celery task: Run job discovery across all configured sources for a user."""
+    logger.info(f"Starting job discovery run for user {user_token}...")
     loop = asyncio.new_event_loop()
     try:
-        result = loop.run_until_complete(_discover_all_sources())
-        logger.info(f"Discovery complete. {result} new jobs found.")
+        result = loop.run_until_complete(_discover_all_sources(user_token))
+        logger.info(f"Discovery complete for user {user_token}. {result} new jobs found.")
         return result
     finally:
         loop.close()

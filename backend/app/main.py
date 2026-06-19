@@ -8,7 +8,7 @@ Mounts all API routes, WebSocket notifications, and CORS middleware.
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -64,30 +64,21 @@ app.add_middleware(
         settings.frontend_url,
         "http://localhost:3000",
         "http://localhost:3001",
-    ],
+      ],
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-from fastapi import Security, HTTPException, status, Depends
-from fastapi.security.api_key import APIKeyHeader
-
-api_key_header = APIKeyHeader(name="X-API-Token", auto_error=False)
-
-async def verify_api_token(api_token: str = Security(api_key_header)):
-    if settings.api_token and api_token != settings.api_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing X-API-Token header",
-        )
+from app.core.auth import verify_api_token
 
 # Mount API routes
-app.include_router(profile_router, dependencies=[Depends(verify_api_token)] if settings.api_token else [])
-app.include_router(preferences_router, dependencies=[Depends(verify_api_token)] if settings.api_token else [])
-app.include_router(jobs_router, dependencies=[Depends(verify_api_token)] if settings.api_token else [])
-app.include_router(applications_router, dependencies=[Depends(verify_api_token)] if settings.api_token else [])
-app.include_router(chatbot_router, dependencies=[Depends(verify_api_token)] if settings.api_token else [])
+app.include_router(profile_router)
+app.include_router(preferences_router)
+app.include_router(jobs_router)
+app.include_router(applications_router)
+app.include_router(chatbot_router)
 
 # Static files for generated resumes/cover letters
 try:
@@ -138,8 +129,10 @@ async def health_check():
 
 
 # ── Dashboard Stats ──────────────────────────────────────────
-@app.get("/api/dashboard", dependencies=[Depends(verify_api_token)] if settings.api_token else [])
-async def dashboard_stats():
+@app.get("/api/dashboard")
+async def dashboard_stats(
+    user_token: str = Depends(verify_api_token),
+):
     """Quick stats for the dashboard."""
     from sqlalchemy import select, func
     from app.core.database import async_session_factory
@@ -147,41 +140,58 @@ async def dashboard_stats():
     from app.models.application import Application
 
     async with async_session_factory() as session:
-        # Job counts by status
+        # Job counts by status scoped to user
         job_counts = await session.execute(
-            select(Job.status, func.count(Job.id)).group_by(Job.status)
+            select(Job.status, func.count(Job.id))
+            .where(Job.user_token == user_token)
+            .group_by(Job.status)
         )
         jobs_by_status = dict(job_counts.all())
 
         # Total jobs
         total_jobs = sum(jobs_by_status.values())
 
-        # High match jobs (score >= 70)
+        # High match jobs (score >= 70) scoped to user
         high_match = await session.execute(
-            select(func.count(Job.id)).where(Job.match_score >= 70)
+            select(func.count(Job.id))
+            .where((Job.match_score >= 70) & (Job.user_token == user_token))
         )
         high_match_count = high_match.scalar() or 0
 
-        # Application counts
+        # Application counts scoped to user
         app_counts = await session.execute(
             select(Application.status, func.count(Application.id))
+            .where(Application.user_token == user_token)
             .group_by(Application.status)
         )
         apps_by_status = dict(app_counts.all())
 
-        # Recent jobs (last 10)
+        # Recent jobs (last 10) scoped to user
         recent = await session.execute(
             select(Job)
+            .where(Job.user_token == user_token)
             .order_by(Job.discovered_at.desc())
             .limit(10)
         )
         recent_jobs = recent.scalars().all()
+
+    # Check active Celery tasks using user-scoped Redis status keys
+    import redis
+    try:
+        r = redis.Redis.from_url(settings.redis_url)
+        is_scanning = r.get(f"scanner_active:{user_token}") == b"true"
+        is_scoring = r.get(f"scoring_active:{user_token}") == b"true"
+    except Exception:
+        is_scanning = False
+        is_scoring = False
 
     return {
         "total_jobs_discovered": total_jobs,
         "high_match_jobs": high_match_count,
         "jobs_by_status": jobs_by_status,
         "applications_by_status": apps_by_status,
+        "is_scanning": is_scanning,
+        "is_scoring": is_scoring,
         "recent_jobs": [
             {
                 "id": j.id,

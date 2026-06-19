@@ -24,6 +24,7 @@ export default function DashboardPage() {
   const [chatLoading, setChatLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const [suggestedReplies, setSuggestedReplies] = useState<string[]>([]);
 
   // Helper to fetch statistics
   const fetchStats = useCallback(() => {
@@ -52,16 +53,18 @@ export default function DashboardPage() {
         setMessages([
           {
             role: "assistant",
-            content: `Welcome, ${prof.name || "candidate"}. Your professional profile has been successfully integrated. As your Career Placement Advisor, I am prepared to target opportunities matching your background. Please clarify your specific parameters: preferred job titles, locations (e.g. Remote, India), and fields of interest.`
+            content: `Welcome, ${prof.name || "candidate"}. Your professional profile has been successfully integrated. Let's configure your search parameters. What type of roles are you seeking?`
           }
         ]);
+        setSuggestedReplies(["Full-time", "Internship", "Both"]);
       } else {
         setMessages([
           {
             role: "assistant",
-            content: "Systems online. Please upload your curriculum vitae (PDF) to begin, or provide your direct preferences. I will target matching roles accordingly."
+            content: "Systems online. Please upload your resume (PDF) to begin, and I will target matching roles for you."
           }
         ]);
+        setSuggestedReplies([]);
       }
     } catch (e: any) {
       setError(e.message || "Failed to load dashboard data");
@@ -81,6 +84,24 @@ export default function DashboardPage() {
 
     return disconnect;
   }, [loadProfileAndStats, fetchStats]);
+
+  // Periodic polling for scanner/scoring status and updates
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+    
+    const poll = () => {
+      api.getDashboard().then((data) => {
+        setStats(data);
+      }).catch(console.error);
+    };
+
+    // Determine poll interval based on status (3s if active, 15s if idle)
+    const intervalTime = (stats?.is_scanning || stats?.is_scoring) ? 3000 : 15000;
+    
+    intervalId = setInterval(poll, intervalTime);
+    
+    return () => clearInterval(intervalId);
+  }, [stats?.is_scanning, stats?.is_scoring]);
 
   // Autoscroll chat
   useEffect(() => {
@@ -141,6 +162,40 @@ export default function DashboardPage() {
         ...prev,
         { role: "assistant", content: result.response }
       ]);
+      setSuggestedReplies(result.suggested_replies || []);
+
+      if (result.preference_update) {
+        setActionMessage("[PREFERENCES_UPDATED] Scanner criteria calibrated.");
+        setTimeout(() => setActionMessage(""), 3000);
+        fetchStats();
+      }
+    } catch (err: any) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "I encountered a processing error. Please try again." }
+      ]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  // Handle Suggested Reply Click
+  const handleSuggestedReplyClick = async (reply: string) => {
+    if (chatLoading) return;
+
+    const userMessage: Message = { role: "user", content: reply };
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
+    setChatLoading(true);
+
+    try {
+      const result = await api.chatbotChat(updatedMessages);
+      
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: result.response }
+      ]);
+      setSuggestedReplies(result.suggested_replies || []);
 
       if (result.preference_update) {
         setActionMessage("[PREFERENCES_UPDATED] Scanner criteria calibrated.");
@@ -217,7 +272,7 @@ export default function DashboardPage() {
         )}
       </div>
 
-      <div className="grid-2" style={{ gridTemplateColumns: "1.2fr 0.8fr", gap: "var(--space-lg)" }}>
+      <div className="dashboard-grid">
         {/* Left Column: Conversational AI Onboarding Assistant */}
         <div className="card" style={{ display: "flex", flexDirection: "column", height: "550px", padding: 0, overflow: "hidden" }}>
           <div className="card-header" style={{ borderBottom: "1px solid var(--border-subtle)", padding: "12px 16px" }}>
@@ -298,6 +353,29 @@ export default function DashboardPage() {
                 </label>
               </div>
             )}
+            {suggestedReplies.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                {suggestedReplies.map((reply) => (
+                  <button
+                    key={reply}
+                    type="button"
+                    className="btn btn-sm btn-ghost"
+                    onClick={() => handleSuggestedReplyClick(reply)}
+                    disabled={chatLoading}
+                    style={{
+                      fontSize: "0.75rem",
+                      padding: "4px 10px",
+                      background: "var(--bg-secondary)",
+                      border: "1px solid var(--border-subtle)",
+                      color: "var(--accent-secondary)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {reply}
+                  </button>
+                ))}
+              </div>
+            )}
             <form onSubmit={handleChatSubmit} style={{ display: "flex", gap: 8 }}>
               <input
                 className="input"
@@ -316,6 +394,40 @@ export default function DashboardPage() {
 
         {/* Right Column: Console Stats & Controls */}
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-md)" }}>
+          {/* Active Search/Scoring Pipeline Status (Loading Indicator) */}
+          {(stats?.is_scanning || stats?.is_scoring) && (
+            <div className="pipeline-status-card">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <h4 style={{ fontSize: "0.85rem", color: "var(--accent-primary)", margin: 0, fontFamily: "var(--font-mono)", fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
+                  <div className="loading-spinner" style={{ width: 12, height: 12, borderWidth: "1.5px" }} />
+                  ACTIVE SEARCH PIPELINE
+                </h4>
+                <span className="tag tag-primary" style={{ fontSize: "0.65rem", textTransform: "uppercase" }}>
+                  {stats.is_scanning && stats.is_scoring ? "SCAN & SCORE" : stats.is_scanning ? "SCANNING" : "SCORING"}
+                </span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div className={`pipeline-step ${stats.is_scanning ? "active" : "completed"}`}>
+                  <span className={`pipeline-step-icon ${stats.is_scanning ? "active animate-pulse" : "completed"}`}>
+                    {stats.is_scanning ? "⚡" : "✓"}
+                  </span>
+                  <span>Scanning job boards & LinkedIn posts...</span>
+                </div>
+                <div className={`pipeline-step ${stats.is_scoring ? "active" : stats.is_scanning ? "pending" : "completed"}`}>
+                  <span className={`pipeline-step-icon ${stats.is_scoring ? "active animate-pulse" : stats.is_scanning ? "pending" : "completed"}`}>
+                    {stats.is_scoring ? "🧠" : stats.is_scanning ? "⋯" : "✓"}
+                  </span>
+                  <span>Evaluating match relevance via Gemini AI...</span>
+                </div>
+              </div>
+              <div className="log-terminal-mini">
+                <div className="log-line active">&gt; daemon process active [OK]</div>
+                {stats.is_scanning && <div className="log-line">&gt; crawling public feeds...</div>}
+                {stats.is_scoring && <div className="log-line">&gt; mapping profile skills with weights...</div>}
+              </div>
+            </div>
+          )}
+
           {/* Quick Metrics */}
           {stats && (
             <div className="stats-grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 10 }}>

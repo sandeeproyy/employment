@@ -16,6 +16,7 @@ class UserProfile(Base):
     __tablename__ = "user_profiles"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_token: Mapped[str] = mapped_column(String(255), default="default", index=True)
     name: Mapped[str] = mapped_column(String(255), default="")
     email: Mapped[str] = mapped_column(String(255), default="")
 

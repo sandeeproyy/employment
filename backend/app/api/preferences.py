@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.auth import verify_api_token
 from app.models.preference import UserPreference
 from app.schemas.preference import PreferenceResponse, PreferenceUpdate
 
@@ -16,14 +17,17 @@ router = APIRouter(prefix="/api/preferences", tags=["Preferences"])
 
 
 @router.get("", response_model=PreferenceResponse)
-async def get_preferences(db: AsyncSession = Depends(get_db)):
+async def get_preferences(
+    db: AsyncSession = Depends(get_db),
+    user_token: str = Depends(verify_api_token),
+):
     """Get current user preferences."""
-    result = await db.execute(select(UserPreference).limit(1))
+    result = await db.execute(select(UserPreference).where(UserPreference.user_token == user_token))
     pref = result.scalar_one_or_none()
 
     if not pref:
-        # Create default preferences
-        pref = UserPreference()
+        # Create default preferences for this specific user
+        pref = UserPreference(user_token=user_token)
         db.add(pref)
         await db.commit()
         await db.refresh(pref)
@@ -35,13 +39,14 @@ async def get_preferences(db: AsyncSession = Depends(get_db)):
 async def update_preferences(
     data: PreferenceUpdate,
     db: AsyncSession = Depends(get_db),
+    user_token: str = Depends(verify_api_token),
 ):
     """Update user preferences."""
-    result = await db.execute(select(UserPreference).limit(1))
+    result = await db.execute(select(UserPreference).where(UserPreference.user_token == user_token))
     pref = result.scalar_one_or_none()
 
     if not pref:
-        pref = UserPreference()
+        pref = UserPreference(user_token=user_token)
         db.add(pref)
 
     if data.job_types is not None:
@@ -61,4 +66,9 @@ async def update_preferences(
 
     await db.commit()
     await db.refresh(pref)
+
+    # Auto-trigger job discovery/scoring pipeline if resume is uploaded
+    from app.services.pipeline_trigger import auto_trigger_pipeline_if_ready
+    await auto_trigger_pipeline_if_ready(db, user_token)
+
     return pref

@@ -12,6 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.models.application import Application
 from app.models.job import Job
+from app.core.auth import verify_api_token
+from app.models.application import Application
+from app.models.job import Job
 from app.schemas.application import (
     ApplicationResponse,
     ApplicationWithJob,
@@ -36,7 +39,10 @@ KANBAN_COLUMNS = [
 
 
 @router.get("/kanban", response_model=KanbanBoard)
-async def get_kanban_board(db: AsyncSession = Depends(get_db)):
+async def get_kanban_board(
+    db: AsyncSession = Depends(get_db),
+    user_token: str = Depends(verify_api_token),
+):
     """Get the full Kanban board with all applications grouped by status."""
     columns = []
 
@@ -45,7 +51,7 @@ async def get_kanban_board(db: AsyncSession = Depends(get_db)):
         result = await db.execute(
             select(Application, Job)
             .join(Job, Application.job_id == Job.id)
-            .where(Application.status == status)
+            .where((Application.status == status) & (Application.user_token == user_token))
             .order_by(Application.updated_at.desc())
         )
         rows = result.all()
@@ -78,17 +84,21 @@ async def get_kanban_board(db: AsyncSession = Depends(get_db)):
         ))
 
     # Analytics
-    analytics = await _get_analytics(db)
+    analytics = await _get_analytics(db, user_token)
 
     return KanbanBoard(columns=columns, analytics=analytics)
 
 
 @router.get("", response_model=list[ApplicationWithJob])
-async def list_applications(db: AsyncSession = Depends(get_db)):
+async def list_applications(
+    db: AsyncSession = Depends(get_db),
+    user_token: str = Depends(verify_api_token),
+):
     """List all applications with job details."""
     result = await db.execute(
         select(Application, Job)
         .join(Job, Application.job_id == Job.id)
+        .where(Application.user_token == user_token)
         .order_by(Application.updated_at.desc())
     )
     rows = result.all()
@@ -115,16 +125,23 @@ async def list_applications(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/analytics", response_model=ApplicationAnalytics)
-async def get_analytics(db: AsyncSession = Depends(get_db)):
+async def get_analytics(
+    db: AsyncSession = Depends(get_db),
+    user_token: str = Depends(verify_api_token),
+):
     """Get aggregate application analytics."""
-    return await _get_analytics(db)
+    return await _get_analytics(db, user_token)
 
 
 @router.get("/{app_id}", response_model=ApplicationResponse)
-async def get_application(app_id: int, db: AsyncSession = Depends(get_db)):
+async def get_application(
+    app_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_token: str = Depends(verify_api_token),
+):
     """Get a single application with details."""
     result = await db.execute(
-        select(Application).where(Application.id == app_id)
+        select(Application).where((Application.id == app_id) & (Application.user_token == user_token))
     )
     app = result.scalar_one_or_none()
     if not app:
@@ -137,10 +154,11 @@ async def update_status(
     app_id: int,
     data: ApplicationStatusUpdate,
     db: AsyncSession = Depends(get_db),
+    user_token: str = Depends(verify_api_token),
 ):
     """Update application status (move between Kanban columns)."""
     result = await db.execute(
-        select(Application).where(Application.id == app_id)
+        select(Application).where((Application.id == app_id) & (Application.user_token == user_token))
     )
     app = result.scalar_one_or_none()
     if not app:
@@ -166,10 +184,11 @@ async def update_notes(
     app_id: int,
     data: ApplicationNotesUpdate,
     db: AsyncSession = Depends(get_db),
+    user_token: str = Depends(verify_api_token),
 ):
     """Update application notes."""
     result = await db.execute(
-        select(Application).where(Application.id == app_id)
+        select(Application).where((Application.id == app_id) & (Application.user_token == user_token))
     )
     app = result.scalar_one_or_none()
     if not app:
@@ -181,12 +200,16 @@ async def update_notes(
 
 
 @router.get("/{app_id}/resume", response_class=HTMLResponse)
-async def get_application_resume(app_id: int, db: AsyncSession = Depends(get_db)):
+async def get_application_resume(
+    app_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_token: str = Depends(verify_api_token),
+):
     """Fetch the tailored HTML resume for this application and return it directly."""
     import os
 
     result = await db.execute(
-        select(Application).where(Application.id == app_id)
+        select(Application).where((Application.id == app_id) & (Application.user_token == user_token))
     )
     app = result.scalar_one_or_none()
     if not app:
@@ -207,12 +230,16 @@ async def get_application_resume(app_id: int, db: AsyncSession = Depends(get_db)
 
 
 @router.get("/{app_id}/latex")
-async def get_application_latex(app_id: int, db: AsyncSession = Depends(get_db)):
+async def get_application_latex(
+    app_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_token: str = Depends(verify_api_token),
+):
     """Fetch the tailored LaTeX resume for this application and return it."""
     import os
 
     result = await db.execute(
-        select(Application).where(Application.id == app_id)
+        select(Application).where((Application.id == app_id) & (Application.user_token == user_token))
     )
     app = result.scalar_one_or_none()
     if not app:
@@ -229,10 +256,10 @@ async def get_application_latex(app_id: int, db: AsyncSession = Depends(get_db))
         from app.models.user import UserProfile
         from app.services.resume_tailor import basic_tailor, render_resume_latex
         
-        job_result = await db.execute(select(Job).where(Job.id == app.job_id))
+        job_result = await db.execute(select(Job).where((Job.id == app.job_id) & (Job.user_token == user_token)))
         job = job_result.scalar_one_or_none()
         
-        profile_result = await db.execute(select(UserProfile).limit(1))
+        profile_result = await db.execute(select(UserProfile).where(UserProfile.user_token == user_token))
         profile = profile_result.scalar_one_or_none()
         
         if job and profile and profile.resume_structured:
@@ -254,10 +281,11 @@ async def get_application_latex(app_id: int, db: AsyncSession = Depends(get_db))
         raise HTTPException(status_code=500, detail=f"Failed to read LaTeX resume file: {str(e)}")
 
 
-async def _get_analytics(db: AsyncSession) -> ApplicationAnalytics:
+async def _get_analytics(db: AsyncSession, user_token: str) -> ApplicationAnalytics:
     """Calculate aggregate analytics."""
     result = await db.execute(
         select(Application.status, func.count(Application.id))
+        .where(Application.user_token == user_token)
         .group_by(Application.status)
     )
     counts = dict(result.all())

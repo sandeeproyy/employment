@@ -16,10 +16,11 @@ class Job(Base):
     __tablename__ = "jobs"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_token: Mapped[str] = mapped_column(String(255), default="default", index=True)
 
     # ── Deduplication ────────────────────────────────────────
     # Hash of normalized(company + title + location) for dedup
-    canonical_id: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    canonical_id: Mapped[str] = mapped_column(String(255), index=True)
 
     # ── Job Details ──────────────────────────────────────────
     title: Mapped[str] = mapped_column(String(500))

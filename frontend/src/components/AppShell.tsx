@@ -67,6 +67,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [showNotif, setShowNotif] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(true);
   const [passcode, setPasscode] = useState("");
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   useEffect(() => {
     // Check if we need auth by attempting a test dashboard fetch
@@ -207,8 +208,28 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="app-layout">
+      {/* Mobile Top Bar */}
+      <header className="mobile-header">
+        <button className="hamburger-btn" onClick={() => setIsMobileNavOpen(!isMobileNavOpen)} aria-label="Toggle Navigation">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+        <div className="mobile-brand">
+          <span>employment</span>
+        </div>
+        <div style={{ width: 36 }} /> {/* spacer to balance hamburger */}
+      </header>
+
+      {/* Sidebar Overlay for Mobile Backdrop */}
+      {isMobileNavOpen && (
+        <div className="sidebar-overlay" onClick={() => setIsMobileNavOpen(false)} />
+      )}
+
       {/* Sidebar */}
-      <aside className="sidebar">
+      <aside className={`sidebar ${isMobileNavOpen ? "open" : ""}`}>
         <div className="sidebar-brand">
           <h1>employment</h1>
           <p>Autonomous Agent</p>
@@ -220,59 +241,61 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               key={item.href}
               href={item.href}
               className={`nav-link ${pathname === item.href ? "active" : ""}`}
+              onClick={() => setIsMobileNavOpen(false)}
             >
               <span className="nav-icon">{item.icon}</span>
               <span>{item.label}</span>
             </Link>
           ))}
-          <button
-            onClick={() => {
-              localStorage.removeItem("api_token");
-              window.location.reload();
-            }}
-            className="nav-link"
-            style={{
-              width: "100%",
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              textAlign: "left",
-              color: "var(--accent-danger)",
-              fontFamily: "var(--font-mono)",
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-              padding: "10px 16px",
-            }}
-          >
-            <span className="nav-icon" style={{ display: "flex", alignItems: "center" }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
-            </span>
-            <span>~/lock_session</span>
-          </button>
         </nav>
 
-        <div style={{ padding: "0 16px", marginTop: "auto" }}>
+        <div style={{ padding: "0 16px 16px", marginTop: "auto" }}>
           <div
-            className="glass-card pulse"
-            style={{ padding: "12px", textAlign: "center" }}
+            className="glass-card"
+            style={{ 
+              padding: "12px", 
+              marginBottom: 12, 
+              borderLeft: "3px solid var(--accent-primary)",
+              background: "rgba(0, 255, 102, 0.02)",
+              textAlign: "left"
+            }}
           >
-            <div style={{ fontSize: "0.75rem", color: "var(--text-tertiary)" }}>
-              Agent Status
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <span style={{ fontSize: "0.7rem", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
+                AGENT_DAEMON
+              </span>
+              <span className="pulse" style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "var(--accent-primary)", boxShadow: "0 0 8px var(--accent-primary)" }} />
             </div>
-            <div
-              style={{
-                fontSize: "0.85rem",
-                fontWeight: 600,
-                color: "var(--accent-success)",
-                marginTop: "4px",
-              }}
-            >
-              Running 24/7
+            
+            <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.72rem", color: "var(--text-secondary)", display: "flex", flexDirection: "column", gap: 3 }}>
+              <div>
+                <span style={{ color: "var(--text-tertiary)" }}>STATE:</span>{" "}
+                <span style={{ color: "var(--accent-primary)", fontWeight: "bold" }}>ACTIVE (24/7)</span>
+              </div>
+              <div>
+                <span style={{ color: "var(--text-tertiary)" }}>CYCLE:</span>{" "}
+                <span>DAEMON_IDLE_POLL</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, paddingTop: 4, borderTop: "1px dashed var(--border-subtle)" }}>
+                <span><span style={{ color: "var(--text-tertiary)" }}>LOAD:</span> 0.08</span>
+                <span><span style={{ color: "var(--text-tertiary)" }}>PING:</span> 12ms</span>
+              </div>
             </div>
+          </div>
+          <div 
+            style={{ 
+              fontFamily: "var(--font-mono)", 
+              fontSize: "0.72rem", 
+              color: "var(--text-tertiary)", 
+              textAlign: "center",
+              borderTop: "1px dashed var(--border-subtle)",
+              paddingTop: 12,
+              marginTop: 16,
+              letterSpacing: "1px",
+              textTransform: "uppercase"
+            }}
+          >
+            <span style={{ color: "var(--accent-primary)", textShadow: "0 0 10px var(--accent-primary)" }}>⚡</span> SYSTEM CRAFTED BY <a href="https://github.com/sandeeproyy" target="_blank" rel="noopener noreferrer" style={{ color: "var(--text-primary)", fontWeight: "bold", textDecoration: "none", borderBottom: "1px dashed var(--accent-primary)", transition: "var(--transition-fast)" }} className="footer-link">SANDY</a>
           </div>
         </div>
       </aside>

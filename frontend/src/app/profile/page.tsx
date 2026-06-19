@@ -164,6 +164,42 @@ export default function ProfilePage() {
               </div>
             </div>
           )}
+
+          {/* Active Session Control */}
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">Session Configuration</h3>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, fontFamily: "var(--font-mono)", fontSize: "0.85rem" }}>
+              <div>
+                <span style={{ color: "var(--text-tertiary)" }}>ACTIVE PASSCODE:</span>{" "}
+                <span style={{ color: "var(--accent-primary)", textShadow: "0 0 8px var(--accent-primary-glow)", fontWeight: "bold" }}>
+                  {typeof window !== "undefined" ? localStorage.getItem("api_token") || "default" : "default"}
+                </span>
+              </div>
+              <p style={{ color: "var(--text-secondary)", fontSize: "0.75rem", lineHeight: 1.4, margin: "4px 0" }}>
+                Workspace data is completely isolated by this passcode. Use another passcode to create/access a separate dashboard.
+              </p>
+              <button
+                onClick={() => {
+                  localStorage.removeItem("api_token");
+                  window.location.reload();
+                }}
+                className="btn btn-primary"
+                style={{ 
+                  alignSelf: "flex-start",
+                  borderColor: "var(--accent-danger)",
+                  color: "var(--accent-danger)",
+                  background: "rgba(255, 62, 62, 0.05)",
+                  fontSize: "0.75rem",
+                  padding: "8px 14px",
+                  cursor: "pointer",
+                }}
+              >
+                [SWITCH PROFILE / LOG OUT]
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Right Column: Console JSON Log Inspector */}

@@ -5,6 +5,9 @@ export const metadata: Metadata = {
   title: "employment — Autonomous Job Application Agent",
   description:
     "24/7 job discovery, AI-powered resume tailoring, and automated applications — all under your control.",
+  icons: {
+    icon: "/castlevania.jpg",
+  },
 };
 
 export default function RootLayout({
