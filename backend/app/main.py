@@ -64,6 +64,7 @@ app.add_middleware(
         settings.frontend_url,
         "http://localhost:3000",
         "http://localhost:3001",
+        "https://modihentai.vercel.app",
       ],
     allow_origin_regex=r"https?://.*",
     allow_credentials=True,

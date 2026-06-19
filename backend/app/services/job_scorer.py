@@ -161,7 +161,11 @@ async def score_job(
             return result
 
         except Exception as e:
+            err_msg = str(e).lower()
             logger.warning(f"AI scoring failed for model {model_name}: {e}")
+            if any(k in err_msg for k in ["429", "quota", "exhausted", "limit", "400", "401", "403", "api_key", "api key", "invalid", "permission"]):
+                logger.error("Gemini API quota exceeded or key invalid. Breaking model retry loop.")
+                break
             continue
 
     logger.error("All Gemini models failed for job scoring. Falling back to basic scoring.")

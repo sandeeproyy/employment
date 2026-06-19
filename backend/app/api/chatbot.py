@@ -335,7 +335,11 @@ async def chat_endpoint(
                 break
 
             except Exception as e:
+                err_msg = str(e).lower()
                 logger.warning(f"Gemini API call failed for model {model_name}: {e}")
+                if any(k in err_msg for k in ["429", "quota", "exhausted", "limit", "400", "401", "403", "api_key", "api key", "invalid", "permission"]):
+                    logger.error("Gemini API quota exceeded or key invalid. Breaking model retry loop.")
+                    break
                 continue
     else:
         gemini_failed = True
