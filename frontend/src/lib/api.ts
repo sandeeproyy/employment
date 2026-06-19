@@ -13,6 +13,10 @@ const getApiBase = () => {
   
   if (typeof window !== 'undefined') {
     const { protocol, hostname } = window.location;
+    // If hosted on Vercel or similar external cloud frontend, point to local backend
+    if (hostname.endsWith('.vercel.app') || hostname === 'modihentai.vercel.app') {
+      return 'http://localhost:8000';
+    }
     // Fallback: use current domain/IP with backend port 8000
     return `${protocol}//${hostname}:8000`;
   }
@@ -384,8 +388,8 @@ export function connectNotifications(
       reconnectTimer = setTimeout(connect, 3000);
     };
 
-    ws.onerror = () => {
-      ws.close();
+    ws.onerror = (err) => {
+      console.error('WebSocket connection error:', err);
     };
 
     // Heartbeat

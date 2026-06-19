@@ -456,6 +456,90 @@ code {
   font-size: 0.75rem;
 }
 
+/* ── Controller tactile buttons ──────────────── */
+.btn-controller {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  transition: all var(--transition-base);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  position: relative;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.btn-controller svg {
+  transition: transform var(--transition-base);
+  flex-shrink: 0;
+}
+
+.btn-controller:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  box-shadow: 0 6px 12px rgba(0, 255, 102, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transform: translateY(-1px);
+}
+
+.btn-controller:hover svg {
+  transform: scale(1.1);
+}
+
+.btn-controller:active {
+  transform: translateY(1px) scale(0.97);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(0, 0, 0, 0.2);
+}
+
+.btn-controller-primary {
+  border-color: var(--accent-secondary);
+  color: var(--accent-secondary);
+  background: rgba(0, 240, 255, 0.03);
+}
+
+.btn-controller-primary:hover {
+  border-color: var(--accent-secondary);
+  color: #fff;
+  background: var(--accent-secondary-glow);
+  box-shadow: 0 6px 15px rgba(0, 240, 255, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.btn-controller-success {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: rgba(0, 255, 102, 0.03);
+}
+
+.btn-controller-success:hover {
+  border-color: var(--accent-primary);
+  color: #fff;
+  background: var(--accent-primary-glow);
+  box-shadow: 0 6px 15px rgba(0, 255, 102, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.btn-controller-danger {
+  border-color: var(--accent-danger);
+  color: var(--accent-danger);
+  background: rgba(255, 62, 62, 0.03);
+}
+
+.btn-controller-danger:hover {
+  border-color: var(--accent-danger);
+  color: #fff;
+  background: rgba(255, 62, 62, 0.15);
+  box-shadow: 0 6px 15px rgba(255, 62, 62, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+
 /* ── Tags / Badges ─────────────────────────── */
 .tag {
   display: inline-flex;

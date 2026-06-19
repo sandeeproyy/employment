@@ -452,30 +452,53 @@ export default function DashboardPage() {
 
           {/* Quick Dashboard Action Controls */}
           <div className="card" style={{ padding: "16px" }}>
-            <h3 style={{ fontSize: "0.85rem", fontWeight: 700, fontFamily: "var(--font-mono)", marginBottom: 12 }}>
+            <h3 style={{ fontSize: "0.85rem", fontWeight: 700, fontFamily: "var(--font-mono)", marginBottom: 16 }}>
               SYSTEM_PIPELINE_CONTROLLER
             </h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <button className="btn btn-primary" style={{ width: "100%", fontSize: "0.8rem", padding: "10px" }} onClick={triggerScan}>
-                [1] RUN SCANNER DAEMON
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <button className="btn-controller btn-controller-primary" style={{ width: "100%" }} onClick={triggerScan}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="5 3 19 12 5 21 5 3" />
+                </svg>
+                RUN SCANNER DAEMON
               </button>
-              <button className="btn" style={{ width: "100%", fontSize: "0.8rem", padding: "10px" }} onClick={triggerScoring}>
-                [2] EVALUATE MATCHES (SCORE)
+              
+              <button className="btn-controller btn-controller-success" style={{ width: "100%" }} onClick={triggerScoring}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="4" y="4" width="16" height="16" rx="2" ry="2" />
+                  <rect x="9" y="9" width="6" height="6" />
+                  <line x1="9" y1="1" x2="9" y2="4" />
+                  <line x1="15" y1="1" x2="15" y2="4" />
+                  <line x1="9" y1="20" x2="9" y2="23" />
+                  <line x1="15" y1="20" x2="15" y2="23" />
+                  <line x1="20" y1="9" x2="23" y2="9" />
+                  <line x1="20" y1="15" x2="23" y2="15" />
+                  <line x1="1" y1="9" x2="4" y2="9" />
+                  <line x1="1" y1="15" x2="4" y2="15" />
+                </svg>
+                EVALUATE MATCHES (SCORE)
               </button>
+              
               {!showResetConfirm ? (
-                <button className="btn btn-danger" style={{ width: "100%", fontSize: "0.8rem", padding: "10px" }} onClick={() => setShowResetConfirm(true)}>
-                  [X] RESET DATABASE & RESTART FRESH
+                <button className="btn-controller btn-controller-danger" style={{ width: "100%" }} onClick={() => setShowResetConfirm(true)}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    <line x1="10" y1="11" x2="10" y2="17" />
+                    <line x1="14" y1="11" x2="14" y2="17" />
+                  </svg>
+                  RESET DATABASE & RESTART FRESH
                 </button>
               ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: 8, border: "1px solid var(--accent-danger)", background: "rgba(255, 62, 62, 0.05)" }}>
-                  <div style={{ fontSize: "0.75rem", color: "var(--accent-danger)", textAlign: "center", fontFamily: "var(--font-mono)" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 12, border: "1px solid var(--accent-danger)", background: "rgba(255, 62, 62, 0.05)", borderRadius: "4px" }}>
+                  <div style={{ fontSize: "0.75rem", color: "var(--accent-danger)", textAlign: "center", fontFamily: "var(--font-mono)", fontWeight: 700 }}>
                     CONFIRM COMPLETE ERASURE?
                   </div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button className="btn btn-danger btn-sm" style={{ flex: 1, fontSize: "0.7rem" }} onClick={handleResetData}>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button className="btn btn-danger btn-sm" style={{ flex: 1, padding: "8px", borderRadius: "2px" }} onClick={handleResetData}>
                       [YES, RESET]
                     </button>
-                    <button className="btn btn-ghost btn-sm" style={{ flex: 1, fontSize: "0.7rem" }} onClick={() => setShowResetConfirm(false)}>
+                    <button className="btn btn-ghost btn-sm" style={{ flex: 1, padding: "8px", borderRadius: "2px" }} onClick={() => setShowResetConfirm(false)}>
                       [CANCEL]
                     </button>
                   </div>

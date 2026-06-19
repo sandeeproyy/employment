@@ -8,7 +8,7 @@ Mounts all API routes, WebSocket notifications, and CORS middleware.
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, status
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, status, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -93,7 +93,7 @@ except Exception:
 
 # ── WebSocket for real-time notifications ─────────────────────
 @app.websocket("/ws/notifications")
-async def websocket_notifications(websocket: WebSocket, token: str | None = None):
+async def websocket_notifications(websocket: WebSocket, token: str | None = Query(None)):
     """
     WebSocket endpoint for real-time desktop notifications.
     The frontend connects here and uses the Browser Notification API
